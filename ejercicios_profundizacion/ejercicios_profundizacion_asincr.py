@@ -22,6 +22,9 @@ import sqlite3
 import json
 import requests
 import re
+import aiohttp
+import asyncio
+
 
 import sqlalchemy
 from sqlalchemy import Column, Integer, String, ForeignKey
@@ -30,7 +33,7 @@ from sqlalchemy.orm import sessionmaker, relationship
 
 
 # Crear el motor (engine) de la base de datos
-engine = sqlalchemy.create_engine("sqlite:///mercadolibre.db")
+engine = sqlalchemy.create_engine("sqlite:///mercadolibre_async.db")
 base = declarative_base()
 
 from config import config
@@ -66,7 +69,7 @@ def create_schema():
     # Crear las tablas
     base.metadata.create_all(engine)
 
-def carga_items_dataBase(data):
+async def carga_items_dataBase(data):
     # Crear la session
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -88,7 +91,7 @@ def carga_items_dataBase(data):
 
 
 
-def invoca_api(url):
+async def invoca_api(url):
     # Recibe una URL y recupera un objeto json_response (Tipo Dataset)
     try:
         response = requests.get(url)
@@ -96,12 +99,14 @@ def invoca_api(url):
 
         # recupera dataset
         json_response = dataset[0]["body"]  
-        carga_items_dataBase(json_response)
+        await carga_items_dataBase(json_response)
     except:
         return     
 
 
-def insert_articulos():
+async def insert_articulos():
+    N = 50
+    tasks = []
     # Insertar el archivo CSV de meli_technical
     # Insertar todas las filas juntas
     with open('meli_technical_challenge_data.csv', 'r') as f:
@@ -114,11 +119,17 @@ def insert_articulos():
             # Arma URL dinamica 
             url = 'https://api.mercadolibre.com/items?ids={}'.format(id)
             # Invoca API 
-            invoca_api(url)   
+            tasks.append(invoca_api(url))   
+
+            if len(tasks) == N:
+                await asyncio.gather(*tasks)
+                tasks = []
+
+        if tasks:
+            await asyncio.gather(*tasks)
 
 
-
-def fill():
+async def fill():
     print('Completemos esta tablita!')
  
     # Llenar la tabla de articulos
@@ -131,7 +142,7 @@ def fill():
     # initial_quantity ----> Este campo corresponde a la cantidad inicial
     # available_quantity --> Este campo corresponde a la cantidad disponible
     # sold_quantity -------> Este campo corresponde a la cantidad vendida
-    insert_articulos()
+    await insert_articulos()
 
 
 def fetch(id):
@@ -151,6 +162,6 @@ def fetch(id):
 if __name__ == '__main__':
     print("Bienvenidos a otra clase de Inove con Python")
     create_schema()         # create and reset database (DB)
-    fill()                  # Carga Data Base
-    print("Tablita se ha completado!")
+    asyncio.run(fill())     # carga data base - CSV + API
+    print('Tablita asyncronic se ha completado!!')
   
